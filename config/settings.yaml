@@ -1,0 +1,17 @@
+# プロジェクト設定
+
+# データパス
+data:
+  raw_html: data/raceHTML
+  processed: data/processed
+  features: data/features
+  images: data/images
+
+# モデル設定
+model:
+  output_dir: models
+
+# スクレイピング設定
+scraper:
+  base_url: https://race.netkeiba.com
+  delay_seconds: 1.0
