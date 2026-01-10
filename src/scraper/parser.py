@@ -356,7 +356,8 @@ def parse_race_html_full(html_path: Path) -> Dict:
 def parse_multiple_html_full(
     html_dir: Path,
     years: Optional[List[int]] = None,
-    progress_callback=None
+    progress_callback=None,
+    existing_race_ids: Optional[set] = None
 ) -> Tuple[List[Dict], List[Dict]]:
     """
     複数HTMLファイルを一括パース（全データ抽出版）
@@ -365,12 +366,14 @@ def parse_multiple_html_full(
         html_dir: HTMLディレクトリ
         years: 対象年リスト（Noneで全年）
         progress_callback: 進捗コールバック関数
+        existing_race_ids: 既存のrace_idセット（差分更新用）
     
     Returns:
         (race_list, horse_list): レース情報リストと馬情報リスト
     """
     race_list = []
     horse_list = []
+    skipped = 0
     
     if years is None:
         year_dirs = sorted([d for d in html_dir.glob('*') if d.is_dir()])
@@ -385,6 +388,14 @@ def parse_multiple_html_full(
             continue
         
         for html_file in sorted(year_dir.glob('*.html')):
+            race_id = html_file.stem
+            
+            # 既存データがある場合はスキップ
+            if existing_race_ids and race_id in existing_race_ids:
+                skipped += 1
+                processed += 1
+                continue
+            
             try:
                 result = parse_race_html_full(html_file)
                 race_list.append(result['race_info'])
@@ -403,17 +414,83 @@ def parse_multiple_html_full(
                 
                 processed += 1
                 if progress_callback and processed % 1000 == 0:
-                    progress_callback(processed, total_files)
+                    progress_callback(processed, total_files, skipped)
                     
             except Exception as e:
                 print(f"Error parsing {html_file}: {e}")
+                processed += 1
     
     if progress_callback:
-        progress_callback(processed, total_files)
+        progress_callback(processed, total_files, skipped)
     
     return race_list, horse_list
+
+
+def parse_incremental(
+    html_dir: Path,
+    races_csv: Path,
+    results_csv: Path,
+    years: Optional[List[int]] = None,
+    progress_callback=None
+) -> Tuple[int, int]:
+    """
+    差分更新: 新規HTMLのみをパースして既存CSVに追加
+    
+    Args:
+        html_dir: HTMLディレクトリ
+        races_csv: 既存のraces.csvパス
+        results_csv: 既存のresults.csvパス
+        years: 対象年リスト（Noneで全年）
+        progress_callback: 進捗コールバック関数
+    
+    Returns:
+        (new_races, new_horses): 新規追加されたレース数と馬データ数
+    """
+    import pandas as pd
+    
+    # 既存データの読み込み
+    existing_race_ids = set()
+    if races_csv.exists():
+        existing_df = pd.read_csv(races_csv, usecols=['race_id'], dtype={'race_id': str})
+        existing_race_ids = set(existing_df['race_id'].astype(str).tolist())
+        print(f"既存レース数: {len(existing_race_ids):,}")
+    
+    # 新規HTMLのみパース
+    new_races, new_horses = parse_multiple_html_full(
+        html_dir,
+        years=years,
+        progress_callback=progress_callback,
+        existing_race_ids=existing_race_ids
+    )
+    
+    if len(new_races) == 0:
+        print("新規レースはありません")
+        return 0, 0
+    
+    # 新規データをDataFrameに変換
+    new_races_df = pd.DataFrame(new_races)
+    new_results_df = pd.DataFrame(new_horses)
+    
+    # 既存CSVに追記
+    if races_csv.exists():
+        # 既存データを読み込んで結合
+        existing_races_df = pd.read_csv(races_csv)
+        existing_results_df = pd.read_csv(results_csv)
+        
+        combined_races_df = pd.concat([existing_races_df, new_races_df], ignore_index=True)
+        combined_results_df = pd.concat([existing_results_df, new_results_df], ignore_index=True)
+        
+        combined_races_df.to_csv(races_csv, index=False, encoding='utf-8')
+        combined_results_df.to_csv(results_csv, index=False, encoding='utf-8')
+    else:
+        # 新規作成
+        new_races_df.to_csv(races_csv, index=False, encoding='utf-8')
+        new_results_df.to_csv(results_csv, index=False, encoding='utf-8')
+    
+    return len(new_races), len(new_horses)
 
 
 # 後方互換性のためのエイリアス
 parse_race_html = parse_race_html_full
 parse_multiple_html = parse_multiple_html_full
+
