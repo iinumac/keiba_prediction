@@ -149,24 +149,25 @@ def parse_race_html_full(html_path: Path) -> Dict:
         if span:
             info_text = span.text.strip()
             
-            # 距離・コース
-            match = re.search(r'(芝|ダート)(右|左)?(外|内)?(直)?(\\d+)m', info_text)
+            # 距離・コース（ダ = ダート の略記にも対応）
+            match = re.search(r'(芝|ダ(?:ート)?)(右|左)?(外|内)?(直)?(\d+)m', info_text)
             if match:
-                race_info['surface'] = match.group(1)
+                surface = match.group(1)
+                race_info['surface'] = 'ダート' if surface.startswith('ダ') else surface
                 race_info['direction'] = match.group(2) or ''
                 race_info['course_type'] = match.group(3) or match.group(4) or ''
                 race_info['distance'] = int(match.group(5))
             
             # 天候
-            weather_match = re.search(r'天候 : (\\S+)', info_text)
+            weather_match = re.search(r'天候\s*[:：]\s*(\S+)', info_text)
             race_info['weather'] = weather_match.group(1) if weather_match else ''
             
             # 馬場状態
-            condition_match = re.search(r'(芝|ダート) : (\\S+)', info_text)
+            condition_match = re.search(r'(芝|ダート)\s*[:：]\s*(\S+)', info_text)
             race_info['track_condition'] = condition_match.group(2) if condition_match else ''
             
             # 発走時刻
-            time_match = re.search(r'発走 : (\\d+:\\d+)', info_text)
+            time_match = re.search(r'発走\s*[:：]\s*(\d+:\d+)', info_text)
             race_info['start_time'] = time_match.group(1) if time_match else ''
     
     # 日付・詳細情報
@@ -174,9 +175,9 @@ def parse_race_html_full(html_path: Path) -> Dict:
     if date_elem:
         date_text = date_elem.text
         
-        date_match = re.search(r'(\\d{4})年(\\d{2})月(\\d{2})日', date_text)
+        date_match = re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日', date_text)
         if date_match:
-            race_info['date'] = f"{date_match.group(1)}-{date_match.group(2)}-{date_match.group(3)}"
+            race_info['date'] = f"{date_match.group(1)}-{int(date_match.group(2)):02d}-{int(date_match.group(3)):02d}"
             race_info['year'] = int(date_match.group(1))
             race_info['month'] = int(date_match.group(2))
         
@@ -218,7 +219,7 @@ def parse_race_html_full(html_path: Path) -> Dict:
             if horse_link:
                 horse['horse_name'] = horse_link.text.strip()
                 href = horse_link.get('href', '')
-                match = re.search(r'/horse/(\\d+)/', href)
+                match = re.search(r'/horse/(\d+)/', href)
                 horse['horse_id'] = match.group(1) if match else None
             
             # 性齢
@@ -238,7 +239,7 @@ def parse_race_html_full(html_path: Path) -> Dict:
             if jockey_link:
                 horse['jockey_name'] = jockey_link.text.strip()
                 href = jockey_link.get('href', '')
-                match = re.search(r'/jockey/result/recent/(\\d+)/', href)
+                match = re.search(r'/jockey/result/recent/(\d+)/', href)
                 horse['jockey_id'] = match.group(1) if match else None
             
             # タイム
@@ -264,7 +265,7 @@ def parse_race_html_full(html_path: Path) -> Dict:
                             horse['first_corner'] = passing_list[0] if len(passing_list) > 0 else None
                             horse['last_corner'] = passing_list[-1] if len(passing_list) > 0 else None
                     # 上がり3F（例: "33.9"）
-                    elif re.match(r'^\\d+\\.\\d+$', text):
+                    elif re.match(r'^\d+\.\d+$', text):
                         try:
                             horse['last_3f'] = float(text)
                         except:
@@ -277,7 +278,7 @@ def parse_race_html_full(html_path: Path) -> Dict:
                 classes = cell.get('class', [])
                 
                 # 単勝オッズ
-                if 'txt_r' in classes and re.match(r'^\\d+\\.\\d+$', text):
+                if 'txt_r' in classes and re.match(r'^\d+\.\d+$', text):
                     try:
                         if 'odds' not in horse:
                             horse['odds'] = float(text)
@@ -295,7 +296,7 @@ def parse_race_html_full(html_path: Path) -> Dict:
             # 馬体重（例: "462(-2)"）
             for cell in cells:
                 text = cell.text.strip()
-                if re.match(r'^\\d+\\([\\+\\-]?\\d+\\)$', text):
+                if re.match(r'^\d+\([\+\-]?\d+\)$', text):
                     weight, change = parse_horse_weight(text)
                     horse['horse_weight'] = weight
                     horse['weight_change'] = change
@@ -313,7 +314,7 @@ def parse_race_html_full(html_path: Path) -> Dict:
                 if trainer_link:
                     horse['trainer_name'] = trainer_link.text.strip()
                     href = trainer_link.get('href', '')
-                    match = re.search(r'/trainer/result/recent/(\\d+)/', href)
+                    match = re.search(r'/trainer/result/recent/(\d+)/', href)
                     horse['trainer_id'] = match.group(1) if match else None
                 
                 horse['trainer_region'] = '東' if '[東]' in trainer_cell.text else '西'
@@ -324,12 +325,12 @@ def parse_race_html_full(html_path: Path) -> Dict:
                 if owner_link:
                     horse['owner_name'] = owner_link.text.strip()
                     href = owner_link.get('href', '')
-                    match = re.search(r'/owner/result/recent/(\\d+)/', href)
+                    match = re.search(r'/owner/result/recent/(\d+)/', href)
                     horse['owner_id'] = match.group(1) if match else None
                     break
             
-            # 賞金（最後のセル）
-            prize_text = cells[-1].text.strip()
+            # 賞金（最後のセル）- カンマ区切りに対応
+            prize_text = cells[-1].text.strip().replace(',', '')
             try:
                 horse['prize_money'] = float(prize_text)
             except ValueError:
