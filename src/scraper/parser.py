@@ -511,7 +511,76 @@ def parse_incremental(
     return len(new_races), len(new_horses)
 
 
+def parse_incremental_parquet(
+    html_dir: Path,
+    races_parquet: Path,
+    results_parquet: Path,
+    years: Optional[List[int]] = None,
+    limit_per_year: Optional[int] = None,
+    progress_callback=None
+) -> Tuple[int, int]:
+    """
+    差分更新: 新規HTMLのみをパースして既存Parquetに追加
+    
+    Args:
+        html_dir: HTMLディレクトリ
+        races_parquet: 既存のraces.parquetパス
+        results_parquet: 既存のresults.parquetパス
+        years: 対象年リスト（Noneで全年）
+        limit_per_year: 各年の処理件数上限（開発用）
+        progress_callback: 進捗コールバック関数
+    
+    Returns:
+        (new_races, new_horses): 新規追加されたレース数と馬データ数
+    """
+    import pandas as pd
+    
+    # 既存データの読み込み
+    existing_race_ids = set()
+    existing_races_df = None
+    existing_results_df = None
+    
+    if races_parquet.exists():
+        existing_races_df = pd.read_parquet(races_parquet)
+        existing_race_ids = set(existing_races_df['race_id'].astype(str).tolist())
+        existing_results_df = pd.read_parquet(results_parquet)
+        print(f"📊 既存データ: {len(existing_race_ids):,} レース")
+    
+    # 新規HTMLのみパース
+    new_races, new_horses = parse_multiple_html_full(
+        html_dir,
+        years=years,
+        progress_callback=progress_callback,
+        existing_race_ids=existing_race_ids,
+        limit_per_year=limit_per_year
+    )
+    
+    if len(new_races) == 0:
+        print("ℹ️ 新規レースはありません")
+        return 0, 0
+    
+    # 新規データをDataFrameに変換
+    new_races_df = pd.DataFrame(new_races)
+    new_results_df = pd.DataFrame(new_horses)
+    
+    # 既存データと結合
+    if existing_races_df is not None:
+        combined_races_df = pd.concat([existing_races_df, new_races_df], ignore_index=True)
+        combined_results_df = pd.concat([existing_results_df, new_results_df], ignore_index=True)
+    else:
+        combined_races_df = new_races_df
+        combined_results_df = new_results_df
+    
+    # Parquet保存
+    combined_races_df.to_parquet(races_parquet, index=False, compression='snappy')
+    combined_results_df.to_parquet(results_parquet, index=False, compression='snappy')
+    
+    print(f"✅ 新規追加: {len(new_races):,} レース, {len(new_horses):,} 出走馬")
+    print(f"   合計: {len(combined_races_df):,} レース, {len(combined_results_df):,} 出走馬")
+    
+    return len(new_races), len(new_horses)
+
+
 # 後方互換性のためのエイリアス
 parse_race_html = parse_race_html_full
 parse_multiple_html = parse_multiple_html_full
-
