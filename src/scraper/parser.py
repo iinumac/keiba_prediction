@@ -358,7 +358,8 @@ def parse_multiple_html_full(
     html_dir: Path,
     years: Optional[List[int]] = None,
     progress_callback=None,
-    existing_race_ids: Optional[set] = None
+    existing_race_ids: Optional[set] = None,
+    limit_per_year: Optional[int] = None
 ) -> Tuple[List[Dict], List[Dict]]:
     """
     複数HTMLファイルを一括パース（全データ抽出版）
@@ -368,6 +369,7 @@ def parse_multiple_html_full(
         years: 対象年リスト（Noneで全年）
         progress_callback: 進捗コールバック関数
         existing_race_ids: 既存のrace_idセット（差分更新用）
+        limit_per_year: 各年の処理件数上限（開発用。Noneで無制限）
     
     Returns:
         (race_list, horse_list): レース情報リストと馬情報リスト
@@ -381,14 +383,25 @@ def parse_multiple_html_full(
     else:
         year_dirs = [html_dir / str(y) for y in years if (html_dir / str(y)).exists()]
     
-    total_files = sum(len(list(d.glob('*.html'))) for d in year_dirs if d.is_dir())
+    # limit_per_year がある場合は概算
+    if limit_per_year:
+        total_files = len(year_dirs) * limit_per_year
+    else:
+        total_files = sum(len(list(d.glob('*.html'))) for d in year_dirs if d.is_dir())
+    
     processed = 0
     
     for year_dir in year_dirs:
         if not year_dir.is_dir():
             continue
         
+        year_count = 0  # この年の処理件数
+        
         for html_file in sorted(year_dir.glob('*.html')):
+            # 年ごとの上限チェック
+            if limit_per_year and year_count >= limit_per_year:
+                break
+            
             race_id = html_file.stem
             
             # 既存データがある場合はスキップ
@@ -414,12 +427,15 @@ def parse_multiple_html_full(
                     horse_list.append(horse)
                 
                 processed += 1
-                if progress_callback and processed % 1000 == 0:
+                year_count += 1
+                
+                if progress_callback and processed % 100 == 0:
                     progress_callback(processed, total_files, skipped)
                     
             except Exception as e:
                 print(f"Error parsing {html_file}: {e}")
                 processed += 1
+                year_count += 1
     
     if progress_callback:
         progress_callback(processed, total_files, skipped)
