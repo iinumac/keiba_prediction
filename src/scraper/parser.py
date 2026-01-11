@@ -149,14 +149,18 @@ def parse_race_html_full(html_path: Path) -> Dict:
         if span:
             info_text = span.text.strip()
             
-            # 距離・コース（ダ = ダート の略記にも対応）
-            match = re.search(r'(芝|ダ(?:ート)?)(右|左)?(外|内)?(直)?(\d+)m', info_text)
+            # 距離・コース
+            # パターン例: "芝右1600m", "ダ右1200m", "芝右 外1600m", "芝左 内2000m", "障芝3000m"
+            match = re.search(r'(障)?(芝|ダ(?:ート)?)\s*(右|左)?\s*(外|内|直)?(?:\s*(外|内|直))?\s*(\d+)m', info_text)
             if match:
-                surface = match.group(1)
+                is_obstacle = match.group(1) is not None  # 障害レース
+                surface = match.group(2)
                 race_info['surface'] = 'ダート' if surface.startswith('ダ') else surface
-                race_info['direction'] = match.group(2) or ''
-                race_info['course_type'] = match.group(3) or match.group(4) or ''
-                race_info['distance'] = int(match.group(5))
+                race_info['direction'] = match.group(3) or ''
+                # 外/内/直 は group(4) または group(5) に入る
+                course_type = match.group(4) or match.group(5) or ''
+                race_info['course_type'] = course_type
+                race_info['distance'] = int(match.group(6))
             
             # 天候
             weather_match = re.search(r'天候\s*[:：]\s*(\S+)', info_text)
