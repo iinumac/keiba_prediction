@@ -535,18 +535,71 @@ def parse_incremental_parquet(
     """
     import pandas as pd
     
-    # 既存データの読み込み
+    # ====== HTMLファイル数のカウント ======
+    html_count = 0
+    html_year_counts = {}
+    
+    if years is None:
+        year_dirs = sorted([d for d in html_dir.glob('*') if d.is_dir()])
+    else:
+        year_dirs = [html_dir / str(y) for y in years if (html_dir / str(y)).exists()]
+    
+    for year_dir in year_dirs:
+        if year_dir.is_dir():
+            year = year_dir.name
+            count = len(list(year_dir.glob('*.html')))
+            html_year_counts[year] = count
+            html_count += count
+    
+    print(f"📁 HTMLファイル数: {html_count:,}")
+    
+    # ====== 既存データの読み込み ======
     existing_race_ids = set()
     existing_races_df = None
     existing_results_df = None
+    parquet_count = 0
+    parquet_year_counts = {}
     
     if races_parquet.exists():
         existing_races_df = pd.read_parquet(races_parquet)
         existing_race_ids = set(existing_races_df['race_id'].astype(str).tolist())
         existing_results_df = pd.read_parquet(results_parquet)
-        print(f"📊 既存データ: {len(existing_race_ids):,} レース")
+        parquet_count = len(existing_race_ids)
+        if 'year' in existing_races_df.columns:
+            parquet_year_counts = existing_races_df.groupby('year').size().to_dict()
+        print(f"📊 Parquetレース数: {parquet_count:,}")
+    else:
+        print("📊 Parquetファイル: なし（初回実行）")
     
-    # 新規HTMLのみパース
+    # ====== 整合性チェック ======
+    diff = html_count - parquet_count
+    
+    print(f"\n{'='*50}")
+    if diff == 0:
+        print("ℹ️ HTMLとParquetのレース数が一致しています")
+        print("   差分更新モードでは新規レースなしと判定されます")
+        print("   ※ HTMLを再ダウンロードした場合は、MODEを'full'に変更して全件再パースしてください")
+    elif diff > 0:
+        print(f"📈 HTMLがParquetより {diff:,} 件多い（新規データあり）")
+    else:
+        print(f"⚠️ 警告: ParquetがHTMLより {-diff:,} 件多い")
+        print("   HTMLが削除されたか、異なるソースからのデータです")
+        print("   MODEを'full'に変更して全件再パースを検討してください")
+    print(f"{'='*50}\n")
+    
+    # 年別の差分を表示
+    print("年別比較:")
+    all_years = sorted(set(html_year_counts.keys()) | set(str(k) for k in parquet_year_counts.keys()))
+    for year in all_years:
+        h_count = html_year_counts.get(year, 0)
+        p_count = parquet_year_counts.get(int(year) if year.isdigit() else year, 0)
+        diff_year = h_count - p_count
+        if diff_year != 0:
+            status = "📈" if diff_year > 0 else "⚠️"
+            print(f"  {year}: HTML={h_count:,}, Parquet={p_count:,} (差分: {diff_year:+,}) {status}")
+    print()
+    
+    # ====== 新規HTMLのみパース ======
     new_races, new_horses = parse_multiple_html_full(
         html_dir,
         years=years,
