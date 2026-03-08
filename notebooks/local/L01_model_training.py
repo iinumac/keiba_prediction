@@ -15,14 +15,16 @@ PROJECT_ROOT = Path('.')
 if str(PROJECT_ROOT / 'src') not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-RESULTS_PARQUET = PROJECT_ROOT / 'data' / 'processed' / 'results.parquet'
+from utils.data_loader import load_results
+
 MODEL_DIR = PROJECT_ROOT / 'models'
 MODEL_DIR.mkdir(exist_ok=True)
 
-print(f"データパス: {RESULTS_PARQUET}")
+print("データソース: GitHub (オンライン)")
 
 # 2. データ読み込み
-results_df = pd.read_parquet(RESULTS_PARQUET)
+print("データ読み込み中（GitHub RAW URL経由）...")
+results_df = load_results(from_github=True)
 print(f"出走馬データ数: {len(results_df):,}")
 
 # 3. 前処理・特徴量エンジニアリング
