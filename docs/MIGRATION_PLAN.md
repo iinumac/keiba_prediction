@@ -277,14 +277,16 @@ GitHub リモートが消滅しておりローカルが唯一のコピーであ�
 
 4. **C01〜C03 の自動化範囲の検討は統合完了後**
 
-5. **Firebase サイト `keibayoso` は削除する**（必要なら作り直す方針）
-   - ただし **`pog-draft-2025` は POG と共有プロジェクト**のため、削除は
-     Hosting サイト `keibayoso` と Function `registerOdds` に限定する。
-     Firestore の `races` は POG と共用、プロジェクト自体は POG が停止するため削除不可。
-   - **実施は後回し**（`firebase` CLI が未インストール）
+5. **Firebase プロジェクト `pog-draft-2025` をまるごと削除する**（未実施）
+   - 当初は「POG と共有のため Hosting サイトのみ削除」としていたが、
+     **POG 2025 が2026シーズンの作り直しにより不要**となり判断を変更。
+     POG2026 は `pog-takatsuba` を使用しており `pog-draft-2025` に依存していない。
+   - 削除により `keibayoso` / `registerOdds` / Firestore全コレクション /
+     全開放ルールが一括で解消される。
+   - 手順は `_archive_keiba_2025/ARCHIVED.md` の Firebase セクション参照。
+     30日間の復元猶予あり。`pog-takatsuba` と取り違えないこと。
 
-6. **Firestore ルールの全開放（`allow read, write: if true`）は対応不要**
-   - 理由: POG 側も現在は使用していないため
+6. **Firestore ルールの全開放（`allow read, write: if true`）は 5 の実施で解消**
 
 7. **旧スクリプトはコード移植せず着眼点のみ台帳化**
 
@@ -294,7 +296,7 @@ GitHub リモートが消滅しておりローカルが唯一のコピーであ�
 
 | # | 論点 | 状態 |
 |---|---|---|
-| A | Firebase `keibayoso` の削除 | **方針決定済み・未実施**。範囲は Hosting サイトと `registerOdds` のみ |
+| A | Firebase の削除 | **方針決定済み・未実施**。`pog-draft-2025` をプロジェクトごと削除（利用者が POG2026 に移行して不在になったため）。手順は `_archive_keiba_2025/ARCHIVED.md` |
 | B | `keiba_gag` の戦略資産（28本） | C04 とは**補完関係**と判明（C04=期待値ベース / keiba_gag=買い目パターン総当たり）。取り込み候補を `FEATURE_BACKLOG.md` に記録。採否はフェーズ3 |
 | C | マスタ出力の `shift()` 有無 | ファイル選択ではなく **C03 の設計論点**と判明。`FEATURE_BACKLOG.md` §2 に整理。フェーズ3で決着 |
 | D | 旧 `Keiba/python` 救出候補 | **判定完了**（§8参照） |
