@@ -150,6 +150,8 @@ def add_horse_features(df: pd.DataFrame, config: FeatureConfig) -> pd.DataFrame:
     grp = df.groupby('horse_id')
     df['horse_expected_top3_rate'] = grp['is_top3'].transform(
         lambda x: x.shift().expanding().mean()).fillna(top3_fill)
+    # C04 での呼び名。中身は同じ
+    df['horse_prev_top3_rate'] = df['horse_expected_top3_rate']
     df['horse_prev_win_rate'] = grp['is_win'].transform(
         lambda x: x.shift().expanding().mean()).fillna(config.debut_win_fill)
 
@@ -243,4 +245,10 @@ def build_features(races_df: pd.DataFrame, results_df: pd.DataFrame,
     df = add_course_features(df, config)
     if config.market_features:
         df = add_market_features(df, config)
-    return df
+
+    # 行順を馬・日付順に固定して返す。
+    # マスタ生成は sort_values('race_date').groupby(...).tail(1) で最新行を取るが、
+    # 同一日に複数レースがある場合（騎手の 356/574 が該当）どの行が選ばれるかは
+    # 呼び出し時点の行順に依存する。順序を固定しないと結果が変わってしまう。
+    # 本質的な対処は docs/FEATURE_BACKLOG.md §2 を参照。
+    return df.sort_values(by=['horse_id', 'race_date'])

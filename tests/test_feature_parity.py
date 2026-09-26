@@ -142,6 +142,39 @@ def compare(name, ref, got, cols, key=('race_id', 'horse_number')):
     return ok
 
 
+
+def build_masters(df):
+    """C03 セル8 のマスタ生成コードの写し。
+
+    `sort_values('race_date').groupby(...).tail(1)` は同一日に複数レースがあると
+    どの行を選ぶかが行順に依存する（騎手の 356/574 が該当）。
+    build_features が行順を固定していないと、ここで結果が変わる。
+    """
+    horse = df.sort_values('race_date').groupby('horse_id').tail(1)[
+        ['horse_id', 'horse_name', 'horse_expected_top3_rate', 'finish_position',
+         'last_3f', 'odds', 'popularity', 'race_date', 'jockey_id']
+    ].rename(columns={'finish_position': 'prev_finish', 'last_3f': 'prev_last_3f',
+                      'odds': 'prev_odds', 'popularity': 'prev_popularity',
+                      'race_date': 'prev_race_date', 'jockey_id': 'prev_jockey_id'})
+    jockey = df.sort_values('race_date').groupby('jockey_id').tail(1)[
+        ['jockey_id', 'jockey_name', 'jockey_added_value']]
+    trainer = df.sort_values('race_date').groupby('trainer_id').tail(1)[
+        ['trainer_id', 'trainer_name', 'trainer_added_value']]
+    return {'horse': horse, 'jockey': jockey, 'trainer': trainer}
+
+
+def compare_masters(ref_df, got_df):
+    """マスタCSVの中身が完全に一致するか（行順含む）。"""
+    ok = True
+    a, b = build_masters(ref_df), build_masters(got_df)
+    for k in a:
+        same = a[k].reset_index(drop=True).equals(b[k].reset_index(drop=True))
+        print(f"  {'✓' if same else '✗'} master_{k:8s} {'一致' if same else '不一致'}"
+              f"  ({len(a[k]):,} 行)")
+        ok &= same
+    return ok
+
+
 def main():
     races = pd.read_parquet(ROOT / 'data/processed/races.parquet')
     results = pd.read_parquet(ROOT / 'data/processed/results.parquet')
@@ -158,6 +191,8 @@ def main():
         'prev_finish', 'prev_last_3f', 'prev_odds', 'prev_popularity', 'days_since_last',
         'is_jockey_changed', 'is_debut', 'surface_encoded', 'year']]
     all_ok &= compare('C03', ref, got, cols)
+    print("\n  --- C03 セル8 のマスタ生成（行順依存の退行検知）---")
+    all_ok &= compare_masters(ref, got)
 
     print()
     print("=" * 62)
@@ -168,6 +203,7 @@ def main():
     cols4 = [
         ('is_top3', 'is_top3'), ('is_win', 'is_win'),
         ('horse_prev_top3_rate', 'horse_expected_top3_rate'),
+        ('horse_prev_top3_rate', 'horse_prev_top3_rate'),   # 別名が同値であること
         ('horse_prev_win_rate', 'horse_prev_win_rate'),
         ('jockey_added_value', 'jockey_added_value'),
         ('trainer_added_value', 'trainer_added_value'),
