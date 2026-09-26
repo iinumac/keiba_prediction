@@ -2,7 +2,7 @@
 
 作成日: 2026-09-26
 対象: `/Users/iinumac/_PrivateDev` 配下の競馬「予想」関連ソース（POG系は対象外）
-ステータス: **フェーズ0（保全）完了 / フェーズ1（統合）完了 / フェーズ2以降 未着手**
+ステータス: **フェーズ0（保全）・フェーズ1（統合）・フェーズ2（整理）完了 / フェーズ3 未着手**
 
 ---
 
@@ -196,54 +196,106 @@ _PrivateDev/
 
 ---
 
-## 8. 残りの手順
+## 8. フェーズ2（整理）実施記録 — 完了
 
-### フェーズ2: 整理
+### アーカイブ化
 
-1. `Keiba` → `_archive_keiba_2025` にリネーム、`ARCHIVED.md` に凍結理由と復元手順を明記
-   （GitHub リモートが消滅しており `.git` が唯一の記録である旨を必ず書く）
-2. 重複 `raceHTML` をファイル単位で照合 → 一致確認後にアーカイブ側を削除（3.7GB回収）
-3. `Keiba/python` の救出候補を1本ずつ判定し、必要分を `archive/keiba_legacy/` へ
-   - 候補: `analyze_course_umaban.py`, `analyze_track_condition_upsets.py`,
-     `analyze_distance_impact{,_dirt}.py`, `analyze_horse_weight.py`, `analyze_track_change.py`,
-     `calculate_expected_value.py`, `detect_value_horses.py`, `parse_odds_from_image.py`, `parse_jra_text.py`
-4. `keiba_prediction/notebooks/{tmp,_old,sagemaker}` と `data/csv/` を削除
-5. `docs/ARCHITECTURE.md` を現構成で書き起こす
+`Keiba` を **`_archive_keiba_2025`** にリネームし、`ARCHIVED.md` を設置（コミット `b7c7b1232`）。
+GitHub リモートが消滅しておりローカルが唯一のコピーである旨、`.git` を削除しないこと、
+ここにしか無い資産（SPA・keiba_gag・特徴量データセット3種）を明記した。
 
-### フェーズ3: Colabパイプラインの確認と改善
+### 重複 raceHTML の照合と削除
 
-1. **C01→C02→C03→C04 を Colab で通しで実行**し、動作と所要時間を記録
-   - **C01 の netkeiba 403 問題**（PR #3/#4 で対策済み）が解消しているかを最優先で確認
-2. **C03 と C04 の特徴量定義の突合** → 共通部分を `src/features/` に集約
-   （`market_implied_win_prob` / `odds_ratio_to_fav` / `pop_odds_mismatch` /
-   `jockey_added_value` / `trainer_added_value` が両方に存在。**本移行の技術的な本丸**）
-3. `keiba_gag` のシミュレーション資産と C04 を比較し、取り込む／捨てるを判断
-4. **C01〜C03 の自動化範囲の検討**（ユーザー指示により統合完了後に着手）
+削除が不可逆（Keiba 側は Git 管理外）なため、サンプルではなく全件照合を行った。
+
+| 検証 | 結果 |
+|---|---|
+| ファイル名集合 | Keiba 固有 **0件**（完全な部分集合） |
+| 全55,153件のサイズ | **完全一致** |
+| 全55,153件の **MD5** | **完全一致** |
+
+照合後に削除。
+
+### 削除実績（約3.8GB回収）
+
+| 対象 | 容量 | 根拠 |
+|---|---|---|
+| `_archive_keiba_2025/data/raceHTML` | 3.3GB | 上記MD5照合 |
+| `_archive_keiba_2025/{node_modules,migration_env}` | 129MB | 再生成可能 |
+| `keiba_prediction/data/csv` | 374MB | parquet と行数完全一致 |
+| `keiba_prediction/notebooks/sagemaker` | 24KB | C01/C02 に置換済み・Git復元可 |
+
+`notebooks/{tmp,_old}` は保全ブランチへのコミット時に作業ツリーから除去済み。
+
+容量: `_archive_keiba_2025` 5.5GB → **2.1GB** / `keiba_prediction` 7.3GB → **6.9GB**
+
+### ドキュメント整備
+
+| ファイル | 内容 |
+|---|---|
+| `docs/ARCHITECTURE.md` | 現構成で全面書き直し。GitHubをデータストアとする設計、C01〜C04、`src/` の公開関数、データ定義 |
+| `docs/FEATURE_BACKLOG.md` | C03/C04 の特徴量突合表と、旧 Keiba・keiba_gag からの取り込み候補 |
+
+### 旧 `Keiba/python` 救出候補の判定
+
+**コードは移植せず、着眼点のみ `FEATURE_BACKLOG.md` に記録**する方針とした。
+旧スクリプトは廃止済みの `features_dataset_fixed.csv` 前提で書かれており
+そのままでは動かないため、動かないコードを現役リポジトリに置くより
+知見を台帳化する方が有効と判断した。
+
+| 判定 | スクリプト |
+|---|---|
+| **着眼点を採用**（C03/C04 のどちらにも無い分析軸） | `analyze_track_condition_upsets.py`（馬場状態×波乱度・478行）、`analyze_course_umaban.py`（コース×枠順）、`analyze_distance_impact{,_dirt}.py`（距離替わり）、`analyze_horse_weight.py`（馬体重増減）、`analyze_track_change.py`（芝ダ替わり） |
+| **C04 と重複・移植不要** | `calculate_expected_value.py`、`detect_value_horses.py` |
+| **別枠** | `parse_odds_from_image.py`（Firebase廃止後に単体利用なら要移植） |
+| **不要** | `parse_jra_text.py`（ハードコードの使い捨て） |
 
 ---
 
-## 9. 決定事項
+## 9. フェーズ3（未着手）
 
-1. **生HTML（55,000超 / `.git` 240MB）は Git 管理のまま維持する**
+1. **C01→C02→C03→C04 を Colab で通しで実行**し、動作と所要時間を記録
+   - **C01 の netkeiba 403 問題**（PR #3/#4 で対策済み）が解消しているかを最優先で確認
+2. **C03 と C04 の特徴量突合** → 共通部分を `src/features/` に集約
+   （共通は7個のみ。`surface_encoded`/`surface_code` など同概念・別名が存在）
+   → 作業台帳: `FEATURE_BACKLOG.md`
+3. マスタ出力の `shift()` 有無の決着（未決事項C）
+4. `keiba_gag` の戦略シミュレーション資産から C04 への取り込み判断
+5. **C01〜C03 の自動化範囲の検討**（ユーザー指示により統合完了後に着手）
+
+---
+
+## 10. 決定事項
+
+1. **生HTML（55,435件 / `.git` 240MB）は Git 管理のまま維持する**
    - 理由: parquet の読み込み・更新は多くても週1回であり、クローン時間は実害にならない
-   - Google Drive への退避や zip 化は行わない
 
 2. **統合先は `keiba_prediction`**（GitHub `iinumac/keiba_prediction`）
-   - 理由: 最新、Colab運用が確立済み、C04 が既にここの parquet に依存
 
 3. **`Keiba` は削除せずアーカイブ。`.git` は必ず保持**
    - 理由: GitHub リモートが消滅しており、ローカルが唯一のコピー
 
-4. **C01〜C03 の自動化範囲の検討は統合完了後**（ユーザー指示）
+4. **C01〜C03 の自動化範囲の検討は統合完了後**
+
+5. **Firebase サイト `keibayoso` は削除する**（必要なら作り直す方針）
+   - ただし **`pog-draft-2025` は POG と共有プロジェクト**のため、削除は
+     Hosting サイト `keibayoso` と Function `registerOdds` に限定する。
+     Firestore の `races` は POG と共用、プロジェクト自体は POG が停止するため削除不可。
+   - **実施は後回し**（`firebase` CLI が未インストール）
+
+6. **Firestore ルールの全開放（`allow read, write: if true`）は対応不要**
+   - 理由: POG 側も現在は使用していないため
+
+7. **旧スクリプトはコード移植せず着眼点のみ台帳化**
 
 ---
 
-## 10. 未決事項
+## 11. 未決事項
 
-| # | 論点 | 選択肢 |
+| # | 論点 | 状態 |
 |---|---|---|
-| A | Firebase 予想サイト `keibayoso`（`pog-draft-2025`）を続けるか | (a) 廃止して完全アーカイブ / (b) `keiba_prediction` に表示層として再構築 / (c) 現状のまま放置 |
-| B | `keiba_gag` のシミュレーション資産（30本）を活かすか | (a) C04 に一本化して破棄 / (b) 有用な戦略だけ C04 に取り込む / (c) 凍結保存 |
-| C | ローカル生成版 `master_*.csv`（526/574件で値が異なる）を採用するか | (a) Colab版を正とする / (b) ローカル版を採用 / (c) C03 を再実行して決着 |
-| D | `Keiba/python` 救出候補9本 | フェーズ2で1本ずつ判定 |
-| E | Functions の Vertex AI モデルが `gemini-1.5-flash-001`（旧世代） | Aで(b)を選ぶ場合のみ、最新モデルへの更新を検討 |
+| A | Firebase `keibayoso` の削除 | **方針決定済み・未実施**。範囲は Hosting サイトと `registerOdds` のみ |
+| B | `keiba_gag` の戦略資産（28本） | C04 とは**補完関係**と判明（C04=期待値ベース / keiba_gag=買い目パターン総当たり）。取り込み候補を `FEATURE_BACKLOG.md` に記録。採否はフェーズ3 |
+| C | マスタ出力の `shift()` 有無 | ファイル選択ではなく **C03 の設計論点**と判明。`FEATURE_BACKLOG.md` §2 に整理。フェーズ3で決着 |
+| D | 旧 `Keiba/python` 救出候補 | **判定完了**（§8参照） |
+| E | Vertex AI `gemini-1.5-flash-001` | Aの実施時に不要となるため**クローズ** |
