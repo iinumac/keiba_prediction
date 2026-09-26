@@ -21,3 +21,9 @@ ENV/
 .vscode/
 *.swp
 *.swo
+
+# Claude Code 作業領域
+.claude/
+
+# parquet からのエクスポート（data/processed/*.parquet が正本・391MB）
+data/csv/
